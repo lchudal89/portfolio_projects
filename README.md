@@ -4,8 +4,12 @@ This repository contains portfolio of data science projects resulted from my dat
 ## Deep Learning- Computer vision projects
 * [Mammogram breast-cancer detection]()
 The goal of this project is to develop a deep learning model to predict whether a patient undergoing mamogram has cancer or not. Over 54000 mammograms in dicom formats were processed.
-* [Colon and lung cancer detection-histological_slides]()
+* [Colon cancer detection-histological_slides](https://github.com/lchudal89/portfolio_projects/blob/main/Computer_vision/colon_cancer%20prediction/coloncancer-training.ipynb)
+In this project, CNN  deeplearning framework keras and tensorflow were used to develop a image classification method  histological slides of colon cancer biopsy were 
 * [NFL player contact's detection](https://github.com/lchudal89/portfolio_projects/blob/main/Computer_vision/NFL_players_contact_detection/Contact-detection-kaggle.ipynb)
+Kaggle competitoion- In this kaggle competition, I developed a model to predict the external contact experienced by players during NFL football games, using video and player tracking data to improve player safety Final rank: top 18% (165/939)
+
+
 ## Machine learning
 * [Hypothetical SpaceX launch prediction]()
 * [Fraudelent credit card transaction prediction](https://github.com/lchudal89/portfolio_projects/blob/main/Machine_learning_projects/Credit-card%20fraud%20detection.ipynb)
