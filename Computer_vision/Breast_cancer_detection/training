@@ -1,0 +1,2929 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "7c0f3547",
+   "metadata": {
+    "papermill": {
+     "duration": 0.012241,
+     "end_time": "2023-02-24T13:20:41.177105",
+     "exception": false,
+     "start_time": "2023-02-24T13:20:41.164864",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# About Notebook\n",
+    "\n",
+    "It is simple starter notebook for breast cancer detection, written in `keras` with `tensorflow 2` backend."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "60aa1565",
+   "metadata": {
+    "_cell_guid": "b1076dfc-b9ad-4769-8c92-a6c4dae69d19",
+    "_kg_hide-output": true,
+    "_uuid": "8f2839f25d086af736a60e9eeb907d3b93b6e0e5",
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:20:41.200673Z",
+     "iopub.status.busy": "2023-02-24T13:20:41.199921Z",
+     "iopub.status.idle": "2023-02-24T13:20:42.976219Z",
+     "shell.execute_reply": "2023-02-24T13:20:42.975192Z"
+    },
+    "papermill": {
+     "duration": 1.791109,
+     "end_time": "2023-02-24T13:20:42.978943",
+     "exception": false,
+     "start_time": "2023-02-24T13:20:41.187834",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "import numpy as np # linear algebra\n",
+    "import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)\n",
+    "import random\n",
+    "import os\n",
+    "import glob\n",
+    "import cv2\n",
+    "import warnings\n",
+    "from packaging.version import parse\n",
+    "from matplotlib import pyplot as plt\n",
+    "from kaggle_datasets import KaggleDatasets\n",
+    "from sklearn.model_selection import GroupKFold, StratifiedGroupKFold\n",
+    "\n",
+    "warnings.simplefilter(action=\"ignore\")\n",
+    "os.environ[\"TF_CPP_MIN_LOG_LEVEL\"] = \"3\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "fac4385a",
+   "metadata": {
+    "papermill": {
+     "duration": 0.010444,
+     "end_time": "2023-02-24T13:20:43.000181",
+     "exception": false,
+     "start_time": "2023-02-24T13:20:42.989737",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Device Setup**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "1af044b6",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:20:43.023127Z",
+     "iopub.status.busy": "2023-02-24T13:20:43.022087Z",
+     "iopub.status.idle": "2023-02-24T13:20:55.876812Z",
+     "shell.execute_reply": "2023-02-24T13:20:55.875830Z"
+    },
+    "papermill": {
+     "duration": 12.868932,
+     "end_time": "2023-02-24T13:20:55.879537",
+     "exception": false,
+     "start_time": "2023-02-24T13:20:43.010605",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "import tensorflow as tf\n",
+    "from tensorflow import keras\n",
+    "import tensorflow_hub as hub\n",
+    "import tensorflow_addons as tfa\n",
+    "from tensorflow.python.client import device_lib\n",
+    "from tensorflow.experimental import numpy as tnp\n",
+    "\n",
+    "def set_tpu(mixed_precision=True):\n",
+    "    try: \n",
+    "        tpu = tf.distribute.cluster_resolver.TPUClusterResolver.connect() \n",
+    "        if mixed_precision:\n",
+    "            keras.mixed_precision.set_global_policy(\"mixed_bfloat16\") \n",
+    "        tf.config.set_soft_device_placement(True)\n",
+    "        strategy = tf.distribute.TPUStrategy(tpu)\n",
+    "        physical_devices = tf.config.list_logical_devices('TPU')\n",
+    "        return (strategy, physical_devices)\n",
+    "    except:\n",
+    "        return False"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "59585723",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:20:55.914457Z",
+     "iopub.status.busy": "2023-02-24T13:20:55.913501Z",
+     "iopub.status.idle": "2023-02-24T13:20:55.923832Z",
+     "shell.execute_reply": "2023-02-24T13:20:55.923055Z"
+    },
+    "papermill": {
+     "duration": 0.030835,
+     "end_time": "2023-02-24T13:20:55.926583",
+     "exception": false,
+     "start_time": "2023-02-24T13:20:55.895748",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def set_cpu_gpus(mixed_precision=True, set_jit=False):\n",
+    "    try: \n",
+    "        # printed out the detected devices\n",
+    "        list_ld = device_lib.list_local_devices()\n",
+    "        for dev in list_ld: print(dev.name,dev.memory_limit)\n",
+    "        physical_devices = tf.config.list_physical_devices(\n",
+    "            'GPU' if len(list_ld) - 1 else 'CPU'\n",
+    "        )\n",
+    "        # For GPU devices, set growth memory constraint\n",
+    "        if 'GPU' in physical_devices[-1]:\n",
+    "            if set_jit:\n",
+    "                tf.config.optimizer.set_jit(set_jit)\n",
+    "            if mixed_precision:\n",
+    "                keras.mixed_precision.set_global_policy(\"mixed_float16\")\n",
+    "            for pd in physical_devices:\n",
+    "                tf.config.experimental.set_memory_growth(pd, True)\n",
+    "        strategy = tf.distribute.MirroredStrategy()\n",
+    "        return (strategy, physical_devices)\n",
+    "    except: \n",
+    "        raise ValueError('No Device Detected!')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "8660617c",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:20:55.959233Z",
+     "iopub.status.busy": "2023-02-24T13:20:55.958927Z",
+     "iopub.status.idle": "2023-02-24T13:21:00.732870Z",
+     "shell.execute_reply": "2023-02-24T13:21:00.731896Z"
+    },
+    "papermill": {
+     "duration": 4.792826,
+     "end_time": "2023-02-24T13:21:00.735022",
+     "exception": false,
+     "start_time": "2023-02-24T13:20:55.942196",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "/device:CPU:0 268435456\n",
+      "/device:GPU:0 14417657856\n",
+      "/device:GPU:1 14417657856\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "([PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU'),\n",
+       "  PhysicalDevice(name='/physical_device:GPU:1', device_type='GPU')],\n",
+       " '2.9.2')"
+      ]
+     },
+     "execution_count": 4,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "mxp = True\n",
+    "jit = False\n",
+    "\n",
+    "strategy, physical_devices = set_tpu(mixed_precision=mxp) or set_cpu_gpus(set_jit=jit)\n",
+    "physical_devices, tf.__version__"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c1bf9af7",
+   "metadata": {
+    "papermill": {
+     "duration": 0.01053,
+     "end_time": "2023-02-24T13:21:00.757005",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:00.746475",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Utils**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "9f5b75db",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:00.780268Z",
+     "iopub.status.busy": "2023-02-24T13:21:00.779854Z",
+     "iopub.status.idle": "2023-02-24T13:21:00.787408Z",
+     "shell.execute_reply": "2023-02-24T13:21:00.786543Z"
+    },
+    "papermill": {
+     "duration": 0.021375,
+     "end_time": "2023-02-24T13:21:00.789430",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:00.768055",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def make_plot(tfdata, figsize=(20, 20)):\n",
+    "    \n",
+    "    plt.figure(figsize=figsize)\n",
+    "    xy = int(np.ceil(tfdata.shape[0] * 0.5))\n",
+    "\n",
+    "    for i in range(tfdata.shape[0]):\n",
+    "        plt.subplot(xy, xy, i + 1)\n",
+    "        plt.imshow(tf.cast(tfdata[i], dtype=tf.uint8))\n",
+    "        plt.axis(\"off\")\n",
+    "\n",
+    "    plt.tight_layout()\n",
+    "    plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "67224e92",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:00.812165Z",
+     "iopub.status.busy": "2023-02-24T13:21:00.811898Z",
+     "iopub.status.idle": "2023-02-24T13:21:00.818571Z",
+     "shell.execute_reply": "2023-02-24T13:21:00.817534Z"
+    },
+    "papermill": {
+     "duration": 0.021096,
+     "end_time": "2023-02-24T13:21:00.821076",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:00.799980",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# True for 'Inference'\n",
+    "SUBMIT = True\n",
+    "\n",
+    "# General\n",
+    "INP_SIZE = 1024\n",
+    "SEED = 101\n",
+    "SPLITS = 4\n",
+    "ValidationFold = 0 # < SPLITS\n",
+    "keras.utils.set_random_seed(SEED)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cc0ecb91",
+   "metadata": {
+    "papermill": {
+     "duration": 0.010661,
+     "end_time": "2023-02-24T13:21:00.843507",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:00.832846",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Data Set"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "c2448d5b",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:00.868415Z",
+     "iopub.status.busy": "2023-02-24T13:21:00.868150Z",
+     "iopub.status.idle": "2023-02-24T13:21:01.846410Z",
+     "shell.execute_reply": "2023-02-24T13:21:01.844832Z"
+    },
+    "papermill": {
+     "duration": 0.993722,
+     "end_time": "2023-02-24T13:21:01.848597",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:00.854875",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>site_id</th>\n",
+       "      <th>patient_id</th>\n",
+       "      <th>image_id</th>\n",
+       "      <th>laterality</th>\n",
+       "      <th>view</th>\n",
+       "      <th>age</th>\n",
+       "      <th>cancer</th>\n",
+       "      <th>biopsy</th>\n",
+       "      <th>invasive</th>\n",
+       "      <th>BIRADS</th>\n",
+       "      <th>implant</th>\n",
+       "      <th>density</th>\n",
+       "      <th>machine_id</th>\n",
+       "      <th>difficult_negative_case</th>\n",
+       "      <th>img_path</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>2</td>\n",
+       "      <td>10006</td>\n",
+       "      <td>462822612</td>\n",
+       "      <td>L</td>\n",
+       "      <td>CC</td>\n",
+       "      <td>61.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>29</td>\n",
+       "      <td>False</td>\n",
+       "      <td>/kaggle/input/rsna-breast-cancer-1024-pngs/out...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>2</td>\n",
+       "      <td>10006</td>\n",
+       "      <td>1459541791</td>\n",
+       "      <td>L</td>\n",
+       "      <td>MLO</td>\n",
+       "      <td>61.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>29</td>\n",
+       "      <td>False</td>\n",
+       "      <td>/kaggle/input/rsna-breast-cancer-1024-pngs/out...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>2</td>\n",
+       "      <td>10006</td>\n",
+       "      <td>1864590858</td>\n",
+       "      <td>R</td>\n",
+       "      <td>MLO</td>\n",
+       "      <td>61.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>29</td>\n",
+       "      <td>False</td>\n",
+       "      <td>/kaggle/input/rsna-breast-cancer-1024-pngs/out...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>2</td>\n",
+       "      <td>10006</td>\n",
+       "      <td>1874946579</td>\n",
+       "      <td>R</td>\n",
+       "      <td>CC</td>\n",
+       "      <td>61.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>29</td>\n",
+       "      <td>False</td>\n",
+       "      <td>/kaggle/input/rsna-breast-cancer-1024-pngs/out...</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>2</td>\n",
+       "      <td>10011</td>\n",
+       "      <td>220375232</td>\n",
+       "      <td>L</td>\n",
+       "      <td>CC</td>\n",
+       "      <td>55.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0.0</td>\n",
+       "      <td>0</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>21</td>\n",
+       "      <td>True</td>\n",
+       "      <td>/kaggle/input/rsna-breast-cancer-1024-pngs/out...</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   site_id  patient_id    image_id laterality view   age  cancer  biopsy  \\\n",
+       "0        2       10006   462822612          L   CC  61.0       0       0   \n",
+       "1        2       10006  1459541791          L  MLO  61.0       0       0   \n",
+       "2        2       10006  1864590858          R  MLO  61.0       0       0   \n",
+       "3        2       10006  1874946579          R   CC  61.0       0       0   \n",
+       "4        2       10011   220375232          L   CC  55.0       0       0   \n",
+       "\n",
+       "   invasive  BIRADS  implant density  machine_id  difficult_negative_case  \\\n",
+       "0         0     NaN        0     NaN          29                    False   \n",
+       "1         0     NaN        0     NaN          29                    False   \n",
+       "2         0     NaN        0     NaN          29                    False   \n",
+       "3         0     NaN        0     NaN          29                    False   \n",
+       "4         0     0.0        0     NaN          21                     True   \n",
+       "\n",
+       "                                            img_path  \n",
+       "0  /kaggle/input/rsna-breast-cancer-1024-pngs/out...  \n",
+       "1  /kaggle/input/rsna-breast-cancer-1024-pngs/out...  \n",
+       "2  /kaggle/input/rsna-breast-cancer-1024-pngs/out...  \n",
+       "3  /kaggle/input/rsna-breast-cancer-1024-pngs/out...  \n",
+       "4  /kaggle/input/rsna-breast-cancer-1024-pngs/out...  "
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "(54706, 15)\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "0    53548\n",
+       "1     1158\n",
+       "Name: cancer, dtype: int64"
+      ]
+     },
+     "execution_count": 7,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "if physical_devices[-1].device_type in ['GPU', 'CPU']:\n",
+    "    DF_PATH = '/kaggle/input/rsna-breast-cancer-detection'\n",
+    "    IMG_PATH = f'/kaggle/input/rsna-breast-cancer-{INP_SIZE}-pngs/output'\n",
+    "else:\n",
+    "    DF_PATH = KaggleDatasets().get_gcs_path('rsna-breast-cancer-detection')\n",
+    "    IMG_PATH = KaggleDatasets().get_gcs_path(f'rsna-breast-cancer-{INP_SIZE}-pngs')\n",
+    "    \n",
+    "df = pd.read_csv(f\"{DF_PATH}/train.csv\")\n",
+    "df['img_path'] = df.apply(\n",
+    "    lambda i: os.path.join(\n",
+    "        f\"{IMG_PATH}\", str(i['patient_id']) + \"_\" + str(i['image_id']) + '.png'\n",
+    "    ), axis=1\n",
+    ")\n",
+    "\n",
+    "display(df.head())\n",
+    "print(df.shape)\n",
+    "df.cancer.value_counts()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "d4d72c54",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:01.874451Z",
+     "iopub.status.busy": "2023-02-24T13:21:01.873609Z",
+     "iopub.status.idle": "2023-02-24T13:21:01.902807Z",
+     "shell.execute_reply": "2023-02-24T13:21:01.900822Z"
+    },
+    "papermill": {
+     "duration": 0.045627,
+     "end_time": "2023-02-24T13:21:01.906193",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:01.860566",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "<class 'pandas.core.frame.DataFrame'>\n",
+      "RangeIndex: 54706 entries, 0 to 54705\n",
+      "Data columns (total 15 columns):\n",
+      " #   Column                   Non-Null Count  Dtype  \n",
+      "---  ------                   --------------  -----  \n",
+      " 0   site_id                  54706 non-null  int64  \n",
+      " 1   patient_id               54706 non-null  int64  \n",
+      " 2   image_id                 54706 non-null  int64  \n",
+      " 3   laterality               54706 non-null  object \n",
+      " 4   view                     54706 non-null  object \n",
+      " 5   age                      54669 non-null  float64\n",
+      " 6   cancer                   54706 non-null  int64  \n",
+      " 7   biopsy                   54706 non-null  int64  \n",
+      " 8   invasive                 54706 non-null  int64  \n",
+      " 9   BIRADS                   26286 non-null  float64\n",
+      " 10  implant                  54706 non-null  int64  \n",
+      " 11  density                  29470 non-null  object \n",
+      " 12  machine_id               54706 non-null  int64  \n",
+      " 13  difficult_negative_case  54706 non-null  bool   \n",
+      " 14  img_path                 54706 non-null  object \n",
+      "dtypes: bool(1), float64(2), int64(8), object(4)\n",
+      "memory usage: 5.9+ MB\n"
+     ]
+    }
+   ],
+   "source": [
+    "df.info()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "47bd159c",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:01.932175Z",
+     "iopub.status.busy": "2023-02-24T13:21:01.931894Z",
+     "iopub.status.idle": "2023-02-24T13:21:01.977597Z",
+     "shell.execute_reply": "2023-02-24T13:21:01.976656Z"
+    },
+    "papermill": {
+     "duration": 0.060938,
+     "end_time": "2023-02-24T13:21:01.979752",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:01.918814",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>Total</th>\n",
+       "      <th>Percent</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>BIRADS</th>\n",
+       "      <td>28420</td>\n",
+       "      <td>0.519504</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>density</th>\n",
+       "      <td>25236</td>\n",
+       "      <td>0.461302</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>age</th>\n",
+       "      <td>37</td>\n",
+       "      <td>0.000676</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>site_id</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>patient_id</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>image_id</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>laterality</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>view</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>cancer</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>biopsy</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>invasive</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>implant</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>machine_id</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>difficult_negative_case</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>img_path</th>\n",
+       "      <td>0</td>\n",
+       "      <td>0.000000</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "                         Total   Percent\n",
+       "BIRADS                   28420  0.519504\n",
+       "density                  25236  0.461302\n",
+       "age                         37  0.000676\n",
+       "site_id                      0  0.000000\n",
+       "patient_id                   0  0.000000\n",
+       "image_id                     0  0.000000\n",
+       "laterality                   0  0.000000\n",
+       "view                         0  0.000000\n",
+       "cancer                       0  0.000000\n",
+       "biopsy                       0  0.000000\n",
+       "invasive                     0  0.000000\n",
+       "implant                      0  0.000000\n",
+       "machine_id                   0  0.000000\n",
+       "difficult_negative_case      0  0.000000\n",
+       "img_path                     0  0.000000"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "def find_missing_data(data):\n",
+    "    total = data.isnull().sum().sort_values(ascending = False)\n",
+    "    percentage = (data.isnull().sum()/data.isnull().count()).sort_values(ascending = False)\n",
+    "    return pd.concat([total,percentage] , axis = 1 , keys = ['Total' , 'Percent'])\n",
+    "find_missing_data(df)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "f8db9be4",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:02.006422Z",
+     "iopub.status.busy": "2023-02-24T13:21:02.006150Z",
+     "iopub.status.idle": "2023-02-24T13:21:05.946197Z",
+     "shell.execute_reply": "2023-02-24T13:21:05.945138Z"
+    },
+    "papermill": {
+     "duration": 3.955855,
+     "end_time": "2023-02-24T13:21:05.948942",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:01.993087",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "fold  cancer\n",
+       "0     0         13356\n",
+       "      1           279\n",
+       "1     0         13519\n",
+       "      1           277\n",
+       "2     0         13347\n",
+       "      1           284\n",
+       "3     0         13326\n",
+       "      1           318\n",
+       "dtype: int64"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "sgkf = StratifiedGroupKFold(\n",
+    "    n_splits=SPLITS, shuffle=True, random_state=SEED\n",
+    ")\n",
+    "df['fold'] = -1\n",
+    "\n",
+    "for fold, (_, test_index) in enumerate(\n",
+    "    sgkf.split(df, df.cancer, df.patient_id)\n",
+    "):\n",
+    "    df.loc[test_index, 'fold'] = fold\n",
+    "    \n",
+    "display(df.groupby(['fold', \"cancer\"]).size())\n",
+    "df.to_csv(f'df_folds_{ValidationFold}.csv', index=False)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "7d7c60a3",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:05.974617Z",
+     "iopub.status.busy": "2023-02-24T13:21:05.974316Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.094054Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.092907Z"
+    },
+    "papermill": {
+     "duration": 0.135739,
+     "end_time": "2023-02-24T13:21:06.096975",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:05.961236",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "(41071, 16) (13635, 16)\n"
+     ]
+    }
+   ],
+   "source": [
+    "df = pd.read_csv(f'df_folds_{ValidationFold}.csv')\n",
+    "train_df = df.query(f'fold != {ValidationFold}')\n",
+    "valid_df = df.query(f'fold == {ValidationFold}')\n",
+    "print(train_df.shape, valid_df.shape)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "ec92dd32",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.122458Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.122077Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.135260Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.133745Z"
+    },
+    "papermill": {
+     "duration": 0.028362,
+     "end_time": "2023-02-24T13:21:06.137657",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.109295",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "8938\n",
+      "0    0.978598\n",
+      "1    0.021402\n",
+      "Name: cancer, dtype: float64\n",
+      "2975\n",
+      "0    0.979538\n",
+      "1    0.020462\n",
+      "Name: cancer, dtype: float64\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(train_df.patient_id.nunique())\n",
+    "print(train_df.cancer.value_counts(normalize=True))\n",
+    "\n",
+    "print(valid_df.patient_id.nunique())\n",
+    "print(valid_df.cancer.value_counts(normalize=True))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e0173336",
+   "metadata": {
+    "papermill": {
+     "duration": 0.011615,
+     "end_time": "2023-02-24T13:21:06.161570",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.149955",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Data Loader"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "f90d71cb",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.186798Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.186506Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.190854Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.189881Z"
+    },
+    "papermill": {
+     "duration": 0.019713,
+     "end_time": "2023-02-24T13:21:06.193100",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.173387",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# SetAutoTune\n",
+    "BATCH_SIZE = 16 * strategy.num_replicas_in_sync\n",
+    "AUTOTUNE = tf.data.AUTOTUNE\n",
+    "EPOCHS = 5\n",
+    "BATCHES_PER_STEPS = 10 # 10 BATCH_SIZE # Be aware (keras/issues/16573)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "id": "452e883b",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.219022Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.218719Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.228171Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.227316Z"
+    },
+    "papermill": {
+     "duration": 0.024663,
+     "end_time": "2023-02-24T13:21:06.230166",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.205503",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def image_decoder(with_labels):\n",
+    "\n",
+    "    def decode(path):\n",
+    "        file_bytes = tf.io.read_file(path)\n",
+    "        img = tf.image.decode_jpeg(file_bytes, channels = 3)\n",
+    "        img = tf.reshape(img, [*[INP_SIZE]*2, 3])\n",
+    "        return img\n",
+    "    \n",
+    "    def decode_with_labels(path, label):\n",
+    "        return decode(path), tf.cast(label, dtype=tf.float32)\n",
+    "    \n",
+    "    return decode_with_labels if with_labels else decode\n",
+    "\n",
+    "def create_dataset(\n",
+    "    df, \n",
+    "    batch_size  = 32, \n",
+    "    with_labels = False,  \n",
+    "    shuffle     = False,\n",
+    "    repeat      = True\n",
+    "):\n",
+    "    # Image file decoder\n",
+    "    decode_fn = image_decoder(with_labels)\n",
+    "\n",
+    "    # Create Dataset\n",
+    "    if with_labels:\n",
+    "        dataset = tf.data.Dataset.from_tensor_slices(\n",
+    "            (df['img_path'].values, df['cancer'].values)\n",
+    "        )\n",
+    "    else:\n",
+    "        dataset = tf.data.Dataset.from_tensor_slices(\n",
+    "            (df['img_path'].values)\n",
+    "        )\n",
+    "        \n",
+    "    dataset = dataset.map(decode_fn, num_parallel_calls = AUTOTUNE)\n",
+    "    dataset = dataset.shuffle(\n",
+    "        8 * BATCH_SIZE, reshuffle_each_iteration = False\n",
+    "    ) if shuffle else dataset\n",
+    "    dataset = dataset.batch(batch_size, drop_remainder=shuffle)\n",
+    "    dataset = dataset.repeat() if repeat else dataset\n",
+    "    dataset = dataset.prefetch(AUTOTUNE)\n",
+    "    return dataset"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "04b71181",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.255022Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.254365Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.420242Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.419245Z"
+    },
+    "papermill": {
+     "duration": 0.180702,
+     "end_time": "2023-02-24T13:21:06.422447",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.241745",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "training_dataset = create_dataset(\n",
+    "    train_df,\n",
+    "    batch_size = BATCH_SIZE, \n",
+    "    with_labels = True, \n",
+    "    shuffle = True,\n",
+    "    repeat  = True\n",
+    ")\n",
+    "\n",
+    "valid_dataset = create_dataset(\n",
+    "    valid_df,\n",
+    "    batch_size = BATCH_SIZE, \n",
+    "    with_labels = True, \n",
+    "    shuffle = False,\n",
+    "    repeat = False\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "210a7165",
+   "metadata": {
+    "papermill": {
+     "duration": 0.012184,
+     "end_time": "2023-02-24T13:21:06.448866",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.436682",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Hyperparameter Settings \n",
+    "\n",
+    "- Loss Functions\n",
+    "- Metrics\n",
+    "- Learning Rate Schedular\n",
+    "- Optimizer"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "id": "ecc2e325",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.474702Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.473875Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.479269Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.478393Z"
+    },
+    "papermill": {
+     "duration": 0.020566,
+     "end_time": "2023-02-24T13:21:06.481233",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.460667",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "from tensorflow.keras import layers\n",
+    "from tensorflow.keras import losses\n",
+    "from tensorflow.keras import metrics\n",
+    "from tensorflow.keras import optimizers\n",
+    "from tensorflow.keras import callbacks\n",
+    "from tensorflow.keras import applications"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "id": "a2fb211a",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.506956Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.506146Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.513293Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.512397Z"
+    },
+    "papermill": {
+     "duration": 0.022234,
+     "end_time": "2023-02-24T13:21:06.515403",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.493169",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "lr_start   = 0.000005\n",
+    "lr_max     = 0.00000125 * BATCH_SIZE\n",
+    "lr_min     = 0.000001\n",
+    "lr_ramp_ep = 5\n",
+    "lr_sus_ep  = 0\n",
+    "lr_decay   = 0.8\n",
+    "wd_decay   = lr_start * 0.04\n",
+    "\n",
+    "\n",
+    "def get_lr_callback(batch_size=8):\n",
+    "    \n",
+    "    def lrfn(epoch):\n",
+    "        if epoch < lr_ramp_ep:\n",
+    "            lr = (lr_max - lr_start) / lr_ramp_ep * epoch + lr_start\n",
+    "            \n",
+    "        elif epoch < lr_ramp_ep + lr_sus_ep:\n",
+    "            lr = lr_max\n",
+    "            \n",
+    "        else:\n",
+    "            lr = (lr_max - lr_min) * lr_decay**(epoch - lr_ramp_ep - lr_sus_ep) + lr_min\n",
+    "            \n",
+    "        return lr\n",
+    "\n",
+    "    lr_callback = callbacks.LearningRateScheduler(lrfn, verbose=True)\n",
+    "    return lr_callback"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "003e2d8d",
+   "metadata": {
+    "papermill": {
+     "duration": 0.012249,
+     "end_time": "2023-02-24T13:21:06.540333",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.528084",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "[**Competition Metrics**](https://www.kaggle.com/code/sohier/probabilistic-f-score) - **stateless**\n",
+    "\n",
+    "It will be used inside the callback API, typically after batch end or epoch end, depending on target."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 18,
+   "id": "5a8247ad",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.568174Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.566436Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.575888Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.574941Z"
+    },
+    "papermill": {
+     "duration": 0.025083,
+     "end_time": "2023-02-24T13:21:06.577892",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.552809",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def tf_pfbeta(from_logits=True, beta=1.0, epsilon=1e-07):\n",
+    "    \n",
+    "    def pfbeta(y_true, y_pred):\n",
+    "        y_pred = tf.cond(\n",
+    "            tf.cast(from_logits, dtype=tf.bool),\n",
+    "            lambda: tf.nn.sigmoid(y_pred),\n",
+    "            lambda: y_pred,\n",
+    "        )\n",
+    "        y_true = tf.reshape(y_true, [-1])\n",
+    "        y_pred = tf.reshape(y_pred, [-1])\n",
+    "\n",
+    "        ctp = tf.reduce_sum(y_true * y_pred, axis=-1)\n",
+    "        cfp = tf.reduce_sum(y_pred, axis=-1) - ctp\n",
+    "\n",
+    "        c_precision = ctp / (ctp + cfp)\n",
+    "        c_recall = ctp / tf.reduce_sum(y_true)\n",
+    "        \n",
+    "        def compute_fractions():\n",
+    "            numerator = c_precision * c_recall\n",
+    "            denominator = beta**2 * c_precision + c_recall + epsilon\n",
+    "            return (1 + beta**2) * tf.math.divide_no_nan(numerator, denominator)\n",
+    "        \n",
+    "        return tf.cond(\n",
+    "            tf.logical_and(\n",
+    "                tf.greater(c_precision, 0.), tf.greater(c_recall, 0.)\n",
+    "            ),\n",
+    "            compute_fractions,\n",
+    "            lambda: tf.constant(0, dtype=tf.float32)\n",
+    "        )\n",
+    "    \n",
+    "    return pfbeta"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "3be578e6",
+   "metadata": {
+    "papermill": {
+     "duration": 0.012096,
+     "end_time": "2023-02-24T13:21:06.602682",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.590586",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "[**Competition Metrics**](https://www.kaggle.com/code/sohier/probabilistic-f-score) - **stateful**\n",
+    "\n",
+    "It will be used in training time `(model.compile)`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 19,
+   "id": "31ac268d",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.629248Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.628986Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.641523Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.640609Z"
+    },
+    "papermill": {
+     "duration": 0.028387,
+     "end_time": "2023-02-24T13:21:06.643543",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.615156",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "class pFBeta(keras.metrics.Metric):\n",
+    "    def __init__(\n",
+    "        self, from_logits=True, beta=1.0, threshold=None, epsilon=1e-07, name='pFBeta', **kwargs\n",
+    "    ):\n",
+    "        super().__init__(name=name, **kwargs)\n",
+    "        self.beta = beta\n",
+    "        self.epsilon = epsilon\n",
+    "        self.threshold = threshold\n",
+    "        self.from_logits = from_logits\n",
+    "        self.true_positives = self.add_weight(name='tp', initializer='zeros')\n",
+    "        self.false_positives = self.add_weight(name='fp', initializer='zeros')\n",
+    "        self.false_negatives = self.add_weight(name='fn', initializer='zeros')\n",
+    "\n",
+    "    def update_state(self, y_true, y_pred, sample_weight=None):\n",
+    "        y_pred = tf.cond(\n",
+    "            tf.cast(self.from_logits, dtype=tf.bool),\n",
+    "            lambda: tf.nn.sigmoid(y_pred),\n",
+    "            lambda: y_pred,\n",
+    "        )\n",
+    "        if self.threshold is not None:\n",
+    "            y_pred = y_pred > self.threshold\n",
+    "            \n",
+    "        y_true = tf.reshape(tf.cast(y_true, dtype=tf.float32), [-1])\n",
+    "        y_pred = tf.reshape(tf.cast(y_pred, dtype=tf.float32), [-1])\n",
+    "        \n",
+    "        self.true_positives.assign_add(tf.reduce_sum(y_true * y_pred, axis=-1))\n",
+    "        self.false_positives.assign_add(\n",
+    "            tf.reduce_sum(y_pred * (1 - y_true))\n",
+    "        )\n",
+    "        self.false_negatives.assign_add(\n",
+    "            tf.reduce_sum((1 - y_pred) * y_true)\n",
+    "        )\n",
+    "\n",
+    "    def result(self):\n",
+    "        precision = tf.math.divide_no_nan(\n",
+    "            self.true_positives, self.true_positives + self.false_positives\n",
+    "        )\n",
+    "        recall = tf.math.divide_no_nan(\n",
+    "            self.true_positives, self.true_positives + self.false_negatives\n",
+    "        )\n",
+    "        numerator = precision * recall\n",
+    "        denominator = self.beta**2 * precision + recall + self.epsilon\n",
+    "        fscore = (1 + self.beta**2) * tf.math.divide_no_nan(numerator, denominator)\n",
+    "        return fscore\n",
+    "    \n",
+    "    def reset_state(self):\n",
+    "        for v in self.variables:\n",
+    "            v.assign(0)\n",
+    "        \n",
+    "    def get_config(self):\n",
+    "        config = {\n",
+    "            \"from_logits\": self.from_logits,\n",
+    "            \"beta\": self.beta,\n",
+    "            \"epsilon\": self.epsilon,\n",
+    "            \"threshold\": self.threshold,\n",
+    "        }\n",
+    "        base_config = super().get_config()\n",
+    "        return {**base_config, **config}"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "id": "68925890",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.670124Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.669538Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.674902Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.673770Z"
+    },
+    "papermill": {
+     "duration": 0.020742,
+     "end_time": "2023-02-24T13:21:06.677001",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.656259",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def tf_auc(from_logits=True):\n",
+    "    auc_fn = metrics.AUC()\n",
+    "    \n",
+    "    def auc(y_true, y_pred):\n",
+    "        y_pred = tf.cond(\n",
+    "            tf.cast(from_logits, dtype=tf.bool),\n",
+    "            lambda: tf.nn.sigmoid(y_pred),\n",
+    "            lambda: y_pred,\n",
+    "        )\n",
+    "        return auc_fn(y_true, y_pred)\n",
+    "    \n",
+    "    return auc"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b2b22517",
+   "metadata": {
+    "papermill": {
+     "duration": 0.011783,
+     "end_time": "2023-02-24T13:21:06.700950",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.689167",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Weighted Binary Loss**\n",
+    "\n",
+    "> A value `pos_weight > 1` decreases the false negative count, hence increasing the recall. Conversely setting `pos_weight < 1` decreases the false positive count and increases the precision. This can be seen from the fact that `pos_weight` is introduced as a multiplicative coefficient for the positive labels term in the loss expression:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "id": "c496235e",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.727523Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.726124Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.734542Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.733681Z"
+    },
+    "papermill": {
+     "duration": 0.023441,
+     "end_time": "2023-02-24T13:21:06.736497",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.713056",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def weighted_binary_loss(\n",
+    "    apply_positive_weight, from_logits=True, reduction=\"mean\"\n",
+    "):\n",
+    "    def inverse_sigmoid(sigmoidal):\n",
+    "        return - tf.math.log(1. / sigmoidal - 1.)\n",
+    "\n",
+    "    def weighted_loss(labels, predictions):\n",
+    "        predictions = tf.convert_to_tensor(predictions)\n",
+    "        labels = tf.cast(labels, predictions.dtype)\n",
+    "        num_samples = tf.cast(tf.shape(labels)[-1], dtype=labels.dtype)\n",
+    "\n",
+    "        logits = tf.cond(\n",
+    "            tf.cast(from_logits, dtype=tf.bool),\n",
+    "            lambda: predictions,\n",
+    "            lambda: inverse_sigmoid(sigmoidal=predictions),\n",
+    "        )\n",
+    "        loss = tf.nn.weighted_cross_entropy_with_logits(\n",
+    "            tf.cast(labels, dtype=tf.float32), logits, pos_weight=apply_positive_weight\n",
+    "        )\n",
+    "        \n",
+    "        if reduction.lower() == \"mean\":\n",
+    "            return tf.reduce_mean(loss)\n",
+    "        elif reduction.lower() == \"sum\":\n",
+    "            return tf.reduce_sum(loss) / num_samples\n",
+    "        elif reduction.lower() == \"none\":\n",
+    "            return loss\n",
+    "        else:\n",
+    "            raise ValueError(\n",
+    "                'Reduction type is should be `mean` or `sum` or `none`. ',\n",
+    "                f'But, received {reduction}'\n",
+    "            )\n",
+    "    return weighted_loss"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "0d42e41b",
+   "metadata": {
+    "papermill": {
+     "duration": 0.012024,
+     "end_time": "2023-02-24T13:21:06.760653",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.748629",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Binary Focal Crossentropy**\n",
+    "\n",
+    "> `focal_factor = (1 - output) ** gamma` for class 1 `focal_factor = output ** gamma` for class 0 where `gamma` is a focusing parameter. When `gamma=0`, this function is equivalent to the binary crossentropy loss."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 22,
+   "id": "f50702da",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.786401Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.786151Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.796826Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.796014Z"
+    },
+    "papermill": {
+     "duration": 0.025877,
+     "end_time": "2023-02-24T13:21:06.798873",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.772996",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# ref...tf/keras/losses/BinaryFocalCrossentropy (available from tf 2.9)\n",
+    "def binary_focal_loss(\n",
+    "    alpha=0.25, \n",
+    "    gamma=2.0, \n",
+    "    label_smoothing=0, \n",
+    "    from_logits=False,\n",
+    "    apply_class_balancing=False,\n",
+    "    apply_positive_weight=1,\n",
+    "    reduction=\"mean\"\n",
+    "):\n",
+    "    '''\n",
+    "    alpha: A weight balancing factor for class 1, default is 0.25. \n",
+    "        The weight for class 0 is 1.0 - alpha.\n",
+    "    \n",
+    "    gamma: A focusing parameter used to compute the focal factor, default is 2.0\n",
+    "    \n",
+    "    apply_class_balancing: A bool, whether to apply weight balancing on the binary \n",
+    "        classes 0 and 1.\n",
+    "    '''\n",
+    "    \n",
+    "    def smooth_labels(labels):\n",
+    "        return labels * (1.0 - label_smoothing) + 0.5 * label_smoothing\n",
+    "    \n",
+    "    def compute_loss(labels, logits):\n",
+    "        logits = tf.convert_to_tensor(logits)\n",
+    "        labels = tf.cast(labels, logits.dtype)\n",
+    "        labels = tf.cond(\n",
+    "            tf.cast(label_smoothing, dtype=tf.bool),\n",
+    "            lambda: smooth_labels(labels),\n",
+    "            lambda: labels,\n",
+    "        )\n",
+    "        num_samples = tf.cast(tf.shape(labels)[-1], dtype=labels.dtype)\n",
+    "        cross_entropy = weighted_binary_loss(\n",
+    "            apply_positive_weight, from_logits, reduction='none'\n",
+    "        )(labels, logits)\n",
+    "        \n",
+    "        sigmoidal = tf.cond(\n",
+    "            tf.cast(from_logits, dtype=tf.bool),\n",
+    "            lambda: tf.nn.sigmoid(logits),\n",
+    "            lambda: logits,\n",
+    "        )\n",
+    "        pt = labels * sigmoidal + (1.0 - labels) * (1.0 - sigmoidal)\n",
+    "        focal_factor = tf.pow(1.0 - pt, gamma)\n",
+    "        focal_bce = focal_factor * cross_entropy\n",
+    "        \n",
+    "        if apply_class_balancing:\n",
+    "            weight = labels * alpha + (1 - labels) * (1 - alpha)\n",
+    "            focal_bce = weight * focal_bce\n",
+    "\n",
+    "        if reduction == 'mean':\n",
+    "            return tf.reduce_mean(focal_bce)\n",
+    "        elif reduction == 'sum':\n",
+    "            return tf.reduce_sum(focal_bce) / num_samples\n",
+    "        else:\n",
+    "            raise ValueError(\n",
+    "                'Reduction type should be `mean` or `sum` ',\n",
+    "                f'But, received {reduction}'\n",
+    "            )\n",
+    "    return compute_loss"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "549ad007",
+   "metadata": {
+    "papermill": {
+     "duration": 0.012168,
+     "end_time": "2023-02-24T13:21:06.823049",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.810881",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Symbolic Discovery of Optimization Algorithms**\n",
+    "\n",
+    "A new optimizer from google (2023). [Code.](https://github.com/google/automl/tree/master/lion)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "id": "2069f36f",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.849227Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.848949Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.865317Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.864151Z"
+    },
+    "papermill": {
+     "duration": 0.032584,
+     "end_time": "2023-02-24T13:21:06.867881",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.835297",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "class Lion(keras.optimizers.Optimizer):\n",
+    "    def __init__(\n",
+    "        self,\n",
+    "        learning_rate=0.0001,\n",
+    "        beta_1=0.9,\n",
+    "        beta_2=0.99,\n",
+    "        wd=0,\n",
+    "        name='lion', \n",
+    "        **kwargs\n",
+    "    ):\n",
+    "        super().__init__(name, **kwargs)\n",
+    "        self._set_hyper('learning_rate', kwargs.get('lr', learning_rate))\n",
+    "        self._set_hyper('beta_1', beta_1)\n",
+    "        self._set_hyper('beta_2', beta_2)\n",
+    "        self._set_hyper('wd', wd)\n",
+    "    \n",
+    "    def _create_slots(self, var_list):\n",
+    "        # Create slots for the first and second moments.\n",
+    "        # Separate for-loops to respect the ordering of slot variables from v1.\n",
+    "        for var in var_list:\n",
+    "            self.add_slot(var, 'm')\n",
+    "    \n",
+    "    def _prepare_local(self, var_device, var_dtype, apply_state):\n",
+    "        super(Lion, self)._prepare_local(var_device, var_dtype, apply_state)\n",
+    "        beta_1_t = tf.identity(self._get_hyper('beta_1', var_dtype))\n",
+    "        beta_2_t = tf.identity(self._get_hyper('beta_2', var_dtype))\n",
+    "        wd_t = tf.identity(self._get_hyper('wd', var_dtype))\n",
+    "        lr = apply_state[(var_device, var_dtype)]['lr_t']\n",
+    "        apply_state[(var_device, var_dtype)].update(\n",
+    "            dict(\n",
+    "                lr=lr,\n",
+    "                beta_1_t=beta_1_t,\n",
+    "                one_minus_beta_1_t=1 - beta_1_t,\n",
+    "                beta_2_t=beta_2_t,\n",
+    "                one_minus_beta_2_t=1 - beta_2_t,\n",
+    "                wd_t=wd_t\n",
+    "            )\n",
+    "        ) \n",
+    "    \n",
+    "    @tf.function(jit_compile=True)\n",
+    "    def _resource_apply_dense(self, grad, var, apply_state=None):\n",
+    "        var_device, var_dtype = var.device, var.dtype.base_dtype\n",
+    "        coefficients = (\n",
+    "            (apply_state or {}).get(\n",
+    "                (\n",
+    "                    var_device, var_dtype\n",
+    "                )\n",
+    "            ) or self._fallback_apply_state(var_device, var_dtype)\n",
+    "        ) \n",
+    "        \n",
+    "        m = self.get_slot(var, 'm')\n",
+    "        var_t = var.assign_sub(\n",
+    "            coefficients['lr_t'] * (\n",
+    "                tf.math.sign(\n",
+    "                    m * coefficients['beta_1_t'] + \n",
+    "                    grad * coefficients['one_minus_beta_1_t']\n",
+    "                ) + var * coefficients['wd_t'])\n",
+    "        )\n",
+    "        \n",
+    "        with tf.control_dependencies([var_t]):\n",
+    "            m.assign(\n",
+    "                m * coefficients['beta_2_t'] + grad * coefficients['one_minus_beta_2_t']\n",
+    "            )\n",
+    "    \n",
+    "    @tf.function(jit_compile=True)\n",
+    "    def _resource_apply_sparse(self, grad, var, indices, apply_state=None):\n",
+    "        var_device, var_dtype = var.device, var.dtype.base_dtype\n",
+    "        coefficients = (\n",
+    "            (apply_state or {}).get(\n",
+    "                (\n",
+    "                    var_device, var_dtype\n",
+    "                )\n",
+    "            ) or self._fallback_apply_state(var_device, var_dtype)\n",
+    "        )\n",
+    "\n",
+    "        m = self.get_slot(var, 'm')\n",
+    "        m_t = m.assign(m * coefficients['beta_1_t'])\n",
+    "        m_scaled_g_values = grad * coefficients['one_minus_beta_1_t']\n",
+    "        m_t = m_t.scatter_add(tf.IndexedSlices(m_scaled_g_values, indices))\n",
+    "        var_t = var.assign_sub(\n",
+    "            coefficients['lr'] * (\n",
+    "                tf.math.sign(m_t) + var * coefficients['wd_t'])\n",
+    "        )\n",
+    "\n",
+    "        with tf.control_dependencies([var_t]):\n",
+    "            m_t = m_t.scatter_add(tf.IndexedSlices(-m_scaled_g_values, indices))\n",
+    "            m_t = m_t.assign(\n",
+    "                m_t * coefficients['beta_2_t'] / coefficients['beta_1_t']\n",
+    "            )\n",
+    "            m_scaled_g_values = grad * coefficients['one_minus_beta_2_t']\n",
+    "            m_t.scatter_add(tf.IndexedSlices(m_scaled_g_values, indices))\n",
+    "    \n",
+    "    def get_config(self):\n",
+    "        config = super(Lion, self).get_config()\n",
+    "        config.update({\n",
+    "            'learning_rate': self._serialize_hyperparameter('learning_rate'),\n",
+    "            'beta_1': self._serialize_hyperparameter('beta_1'),\n",
+    "            'beta_2': self._serialize_hyperparameter('beta_2'),\n",
+    "            'wd': self._serialize_hyperparameter('wd'),\n",
+    "        })\n",
+    "        return config"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "55541998",
+   "metadata": {
+    "papermill": {
+     "duration": 0.013931,
+     "end_time": "2023-02-24T13:21:06.894233",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.880302",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "## Data Augmentation\n",
+    "\n",
+    "We like to insert data augmentation inside the model to get leverage the GPU/TPU speed. Note, the augmentation layers are active during the training time but not testing or inference time. That makes sense but you may want to consider **Test-Time-Augmentation**, see more [details](https://github.com/keras-team/keras/issues/17385). "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "id": "1a5669ca",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.920275Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.920010Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.925448Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.924434Z"
+    },
+    "papermill": {
+     "duration": 0.020529,
+     "end_time": "2023-02-24T13:21:06.927337",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.906808",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "from tensorflow.keras.layers import Resizing\n",
+    "from tensorflow.keras.layers import Rescaling\n",
+    "from tensorflow.keras.layers import RandomCrop\n",
+    "from tensorflow.keras.layers import RandomFlip\n",
+    "from tensorflow.keras.layers import RandomZoom\n",
+    "from tensorflow.keras.layers import RandomRotation\n",
+    "from tensorflow.keras.layers import RandomBrightness\n",
+    "from tensorflow.keras.layers import RandomContrast"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 25,
+   "id": "db77e250",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.953002Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.952706Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.962425Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.961600Z"
+    },
+    "papermill": {
+     "duration": 0.025041,
+     "end_time": "2023-02-24T13:21:06.964541",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.939500",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# Preprocessing\n",
+    "data_preprocessing = keras.Sequential(\n",
+    "    [\n",
+    "        Resizing(\n",
+    "            *[INP_SIZE] * 2, \n",
+    "            interpolation=\"bilinear\"\n",
+    "        ),\n",
+    "    ], \n",
+    "    name='PreprocessingLayers'\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "id": "6772f55a",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:06.990631Z",
+     "iopub.status.busy": "2023-02-24T13:21:06.990117Z",
+     "iopub.status.idle": "2023-02-24T13:21:06.997573Z",
+     "shell.execute_reply": "2023-02-24T13:21:06.996731Z"
+    },
+    "papermill": {
+     "duration": 0.022488,
+     "end_time": "2023-02-24T13:21:06.999556",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:06.977068",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# Augmentation\n",
+    "class TrainingAugmentationLayers(keras.Sequential):\n",
+    "    def __init__(self, name='AugmentationLayers', **kwargs):\n",
+    "        super().__init__(name=name, **kwargs)\n",
+    "        self.random_flip = RandomFlip(\"horizontal\")\n",
+    "        self.random_contrast = RandomContrast(factor=0.4)\n",
+    "        self.random_brightness = RandomBrightness(\n",
+    "            factor=0.3, value_range=(0, 255)\n",
+    "        )\n",
+    "    def call(self, inputs):\n",
+    "        x = self.random_flip(inputs)\n",
+    "        x = self.random_contrast(x)\n",
+    "        x = self.random_brightness(x)\n",
+    "        return x"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 27,
+   "id": "54b35a8d",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.027630Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.027333Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.032482Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.031534Z"
+    },
+    "papermill": {
+     "duration": 0.021342,
+     "end_time": "2023-02-24T13:21:07.034467",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.013125",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "if not SUBMIT:\n",
+    "    temp_ds = create_dataset(\n",
+    "        valid_df.sample(20),\n",
+    "        batch_size=10, \n",
+    "        with_labels=True, \n",
+    "        shuffle=False\n",
+    "    )\n",
+    "    x, y = next(iter(temp_ds))\n",
+    "    x = data_preprocessing(x)\n",
+    "    aug_x = TrainingAugmentationLayers()(x, training=True)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 28,
+   "id": "6b7b66ff",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.062033Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.061734Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.066078Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.064973Z"
+    },
+    "papermill": {
+     "duration": 0.020475,
+     "end_time": "2023-02-24T13:21:07.068163",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.047688",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "if not SUBMIT:\n",
+    "    make_plot(x)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 29,
+   "id": "feaf069a",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.097393Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.096554Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.100995Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.099941Z"
+    },
+    "papermill": {
+     "duration": 0.021156,
+     "end_time": "2023-02-24T13:21:07.103091",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.081935",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "if not SUBMIT:\n",
+    "    make_plot(aug_x) "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "739ce7dc",
+   "metadata": {
+    "papermill": {
+     "duration": 0.013582,
+     "end_time": "2023-02-24T13:21:07.130500",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.116918",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Model\n",
+    "\n",
+    "---\n",
+    "\n",
+    "**Might be useful**\n",
+    "\n",
+    "- [All Weights variation of official EfficientNet V2](https://www.kaggle.com/competitions/petfinder-pawpularity-score/discussion/285720)\n",
+    "- [Latest EfficientNets-B0-B7 checkpoints](https://www.kaggle.com/competitions/petfinder-pawpularity-score/discussion/275221)\n",
+    "- [Hybrid EfficientNet Swin-Transformer](https://www.kaggle.com/code/ipythonx/tf-hybrid-efficientnet-swin-transformer-gradcam)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 30,
+   "id": "c278e85a",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.159867Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.159040Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.166068Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.165156Z"
+    },
+    "papermill": {
+     "duration": 0.0239,
+     "end_time": "2023-02-24T13:21:07.168145",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.144245",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "WEIGHT_PATHS = '/kaggle/input/tfkeras-efficientnetsv2/21_ft1k_notop'\n",
+    "\n",
+    "def BreastCancerDetect(image_size, name='model'):\n",
+    "    model = keras.Sequential(\n",
+    "        [\n",
+    "            keras.layers.InputLayer(input_shape=(image_size, image_size, 3)),\n",
+    "            data_preprocessing,\n",
+    "            TrainingAugmentationLayers(),\n",
+    "            applications.EfficientNetV2B0(\n",
+    "                include_top=False, \n",
+    "                pooling='avg', \n",
+    "                include_preprocessing=True,\n",
+    "                weights=f'{WEIGHT_PATHS}/efficientnetv2-b0-21k-ft1k_notop.h5'\n",
+    "            ),\n",
+    "            keras.layers.Dense(1, activation=None, dtype='float32')\n",
+    "        ], name=name\n",
+    "    )\n",
+    "    return model"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 31,
+   "id": "b00d5ff7",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.197227Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.196452Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.207592Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.206791Z"
+    },
+    "papermill": {
+     "duration": 0.027342,
+     "end_time": "2023-02-24T13:21:07.209650",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.182308",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "class ExtendedModel(keras.Model):\n",
+    "    def __init__(self, model, *args, **kwargs):\n",
+    "        super().__init__(*args, **kwargs)\n",
+    "        # Hold the target and prediction label per epoch at begin\n",
+    "        self.val_gt = tf.Variable(\n",
+    "            tnp.empty((0), dtype=tf.float32), shape=[None], trainable=False\n",
+    "        )\n",
+    "        self.val_pred = tf.Variable(\n",
+    "            tnp.empty((0, 1), dtype=tf.float32), shape=[None, 1], trainable=False\n",
+    "        )\n",
+    "        # Actual model\n",
+    "        self.model = model\n",
+    "    \n",
+    "    def test_step(self, data):\n",
+    "        x, y = data\n",
+    "        y_pred = self.model(x, training=False)\n",
+    "        self.compiled_loss(y, y_pred, regularization_losses=self.losses)\n",
+    "        self.compiled_metrics.update_state(y, y_pred)\n",
+    "\n",
+    "        self.val_gt.assign(\n",
+    "            tf.concat([self.val_gt, y], axis=0)\n",
+    "        )\n",
+    "        self.val_pred.assign(\n",
+    "            tf.concat([self.val_pred, y_pred], axis=0)\n",
+    "        )\n",
+    "        return {m.name: m.result() for m in self.metrics}\n",
+    "    \n",
+    "    def call(self, inputs):\n",
+    "        return self.model(inputs)\n",
+    "    \n",
+    "    def save_weights(\n",
+    "        self, filepath, overwrite=True, save_format=None, options=None\n",
+    "    ):\n",
+    "        # Overriding this method will allow us to use the `ModelCheckpoint`\n",
+    "        self.model.save_weights(\n",
+    "            filepath=filepath,\n",
+    "            overwrite=overwrite,\n",
+    "            save_format=save_format,\n",
+    "            options=options,\n",
+    "        )\n",
+    "        \n",
+    "    def save(\n",
+    "        self, filepath, overwrite=True, include_optimizer=True, \n",
+    "        save_format=None, signatures=None, options=None\n",
+    "    ):\n",
+    "        # Overriding this method will allow us to use the `ModelCheckpoint`\n",
+    "        self.model.save(\n",
+    "            filepath=filepath,\n",
+    "            overwrite=overwrite,\n",
+    "            save_format=save_format,\n",
+    "            options=options,\n",
+    "            include_optimizer=include_optimizer,\n",
+    "            signatures=signatures\n",
+    "        )"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "id": "f28c3e29",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.238165Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.237261Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.243320Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.242501Z"
+    },
+    "papermill": {
+     "duration": 0.022886,
+     "end_time": "2023-02-24T13:21:07.245517",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.222631",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def get_optimizer(mode='adamw'):\n",
+    "    \n",
+    "    if mode.lower() == 'adamw':\n",
+    "        opt = tfa.optimizers.AdamW(\n",
+    "            learning_rate=0.003, weight_decay=wd_decay\n",
+    "        )\n",
+    "    elif mode.lower() == 'lion':\n",
+    "        opt = Lion(\n",
+    "            learning_rate=0.003, wd=wd_decay\n",
+    "        )\n",
+    "    else:\n",
+    "        opt = keras.optimizers.Adam(\n",
+    "            learning_rate=0.003\n",
+    "        )\n",
+    "        \n",
+    "    return opt"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 33,
+   "id": "4f4ca3c9",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.273192Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.272382Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.279608Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.278596Z"
+    },
+    "papermill": {
+     "duration": 0.023372,
+     "end_time": "2023-02-24T13:21:07.281977",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.258605",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def get_loss_fn(mode='weighted_binary'):\n",
+    "    \n",
+    "    if mode.lower() == 'weighted_binary':\n",
+    "        loss_fn = weighted_binary_loss(\n",
+    "            apply_positive_weight=5, \n",
+    "            from_logits=True, \n",
+    "            reduction=\"mean\"\n",
+    "        )\n",
+    "    elif mode.lower() == 'focal':\n",
+    "        loss_fn = binary_focal_loss(\n",
+    "            alpha=0.25, \n",
+    "            gamma=2.0, \n",
+    "            label_smoothing=0.05, \n",
+    "            from_logits=True,\n",
+    "            apply_class_balancing=True,\n",
+    "            apply_positive_weight=1,\n",
+    "            reduction=\"mean\"\n",
+    "        )\n",
+    "    else:\n",
+    "        loss_fn = keras.losses.BinaryCrossentropy(\n",
+    "            from_logits=True,\n",
+    "            label_smoothing=0.01\n",
+    "        )\n",
+    "    \n",
+    "    return loss_fn"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 34,
+   "id": "b853c1e9",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.309568Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.308836Z",
+     "iopub.status.idle": "2023-02-24T13:21:07.313689Z",
+     "shell.execute_reply": "2023-02-24T13:21:07.312886Z"
+    },
+    "papermill": {
+     "duration": 0.020502,
+     "end_time": "2023-02-24T13:21:07.315665",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.295163",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def get_metrics():\n",
+    "    metrics_list = [\n",
+    "        pFBeta(beta=1.0, from_logits=True),\n",
+    "        tf_auc(from_logits=True)\n",
+    "    ]\n",
+    "    return metrics_list"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 35,
+   "id": "e1c52042",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:07.342085Z",
+     "iopub.status.busy": "2023-02-24T13:21:07.341548Z",
+     "iopub.status.idle": "2023-02-24T13:21:23.745445Z",
+     "shell.execute_reply": "2023-02-24T13:21:23.742953Z"
+    },
+    "papermill": {
+     "duration": 16.420954,
+     "end_time": "2023-02-24T13:21:23.749197",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:07.328243",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Model: \"CancerDetect\"\n",
+      "_________________________________________________________________\n",
+      " Layer (type)                Output Shape              Param #   \n",
+      "=================================================================\n",
+      " CancerDetect (Sequential)   (None, 1)                 5920593   \n",
+      "                                                                 \n",
+      "=================================================================\n",
+      "Total params: 5,920,593\n",
+      "Trainable params: 5,859,985\n",
+      "Non-trainable params: 60,608\n",
+      "_________________________________________________________________\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Resets all state generated by Keras, if.\n",
+    "keras.backend.clear_session()\n",
+    "\n",
+    "# Open a strategy scope.\n",
+    "with strategy.scope():\n",
+    "    # build cancer detecting model\n",
+    "    model = BreastCancerDetect(image_size=INP_SIZE, name='CancerDetect')\n",
+    "    \n",
+    "    # Doesn't work if jit is enabled: https://github.com/keras-team/keras/issues/17350\n",
+    "    # Doesn't work on TPU: https://github.com/tensorflow/tensorflow/issues/59511 \n",
+    "    # Known issue: \n",
+    "    # https://www.tensorflow.org/xla/known_issues#dynamic_tftensorarray_is_not_supported\n",
+    "    if not jit or not physical_devices[-1].device_type in ['GPU', 'CPU']:\n",
+    "        model = ExtendedModel(model, name=model.name)\n",
+    "    \n",
+    "    # Compile\n",
+    "    model.compile(\n",
+    "        optimizer=get_optimizer(mode='lion'),\n",
+    "        loss=get_loss_fn(mode='weighted_binary'),\n",
+    "        metrics=get_metrics(),\n",
+    "        steps_per_execution=BATCHES_PER_STEPS,\n",
+    "    )\n",
+    "\n",
+    "_ = model(tf.ones(shape=(1, INP_SIZE, INP_SIZE, 3)))    \n",
+    "model.summary()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 36,
+   "id": "560c7b77",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:23.780927Z",
+     "iopub.status.busy": "2023-02-24T13:21:23.780624Z",
+     "iopub.status.idle": "2023-02-24T13:21:23.785027Z",
+     "shell.execute_reply": "2023-02-24T13:21:23.784173Z"
+    },
+    "papermill": {
+     "duration": 0.02165,
+     "end_time": "2023-02-24T13:21:23.788046",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:23.766396",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "True CancerDetect\n"
+     ]
+    }
+   ],
+   "source": [
+    "for layer in model.layers:\n",
+    "    print(layer.trainable, layer.name)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5fefbc0d",
+   "metadata": {
+    "papermill": {
+     "duration": 0.013117,
+     "end_time": "2023-02-24T13:21:23.815267",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:23.802150",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Callbacks\n",
+    "\n",
+    "We will create a custom callback, that will be used to find the optimal value of the target metric (`F1`) with corresponding threshold value. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 37,
+   "id": "a971b62f",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:23.843685Z",
+     "iopub.status.busy": "2023-02-24T13:21:23.843416Z",
+     "iopub.status.idle": "2023-02-24T13:21:23.853600Z",
+     "shell.execute_reply": "2023-02-24T13:21:23.852542Z"
+    },
+    "papermill": {
+     "duration": 0.026884,
+     "end_time": "2023-02-24T13:21:23.856167",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:23.829283",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "class OptimalPFBetaWithThresholdCallback(keras.callbacks.Callback):\n",
+    "    def __init__(self):\n",
+    "        super().__init__()\n",
+    "        self.cmp_metric = tf_pfbeta(\n",
+    "            from_logits=False, beta=1.0, epsilon=1e-07\n",
+    "        )\n",
+    "    \n",
+    "    def on_epoch_begin(self, epoch, logs=None):\n",
+    "        self.model.val_gt.assign(\n",
+    "            tf.Variable(\n",
+    "                tnp.empty((0), dtype=tf.float32), shape=[None], trainable=False\n",
+    "            )\n",
+    "        )\n",
+    "        self.model.val_pred.assign(\n",
+    "            tf.Variable(\n",
+    "                tnp.empty((0, 1), dtype=tf.float32), shape=[None, 1], trainable=False\n",
+    "            )\n",
+    "        )\n",
+    "\n",
+    "    def on_epoch_end(self, epoch, logs=None):\n",
+    "        y_true = strategy.gather(self.model.val_gt, axis=0).numpy()\n",
+    "        y_pred = strategy.gather(self.model.val_pred, axis=0).numpy()\n",
+    "        y_pred = tf.nn.sigmoid(y_pred)\n",
+    "        max_f1score, at_threshold = OptimalPFBetaWithThresholdCallback().tf_pfbeta_opt(y_true, y_pred)\n",
+    "        logs['val_pFBeta_binarize'] = max_f1score.numpy()\n",
+    "        logs['val_threshold'] = at_threshold.numpy()\n",
+    "        \n",
+    "    def tf_pfbeta_opt(self, y_true, y_pred):\n",
+    "        thresholds = tf.range(0, 1, 0.05)\n",
+    "        f1scores = []\n",
+    "        \n",
+    "        for threshold in thresholds:\n",
+    "            scores = self.cmp_metric(\n",
+    "                y_true, tf.cast(y_pred > threshold, dtype=tf.float32)\n",
+    "            )\n",
+    "            f1scores.append(scores)\n",
+    "            \n",
+    "        max_f1score = tf.reduce_max(f1scores)\n",
+    "        at_threshold = thresholds[tf.argmax(f1scores)]\n",
+    "        return max_f1score, at_threshold"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 38,
+   "id": "ef2d48f1",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:23.883888Z",
+     "iopub.status.busy": "2023-02-24T13:21:23.883560Z",
+     "iopub.status.idle": "2023-02-24T13:21:23.890133Z",
+     "shell.execute_reply": "2023-02-24T13:21:23.889281Z"
+    },
+    "papermill": {
+     "duration": 0.022421,
+     "end_time": "2023-02-24T13:21:23.892034",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:23.869613",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def get_callbacks(monitor, ckpt_id, add_callback=None):\n",
+    "    list_of_callbacks = [\n",
+    "        get_lr_callback(BATCH_SIZE),\n",
+    "        callbacks.ModelCheckpoint(\n",
+    "            filepath=ckpt_id,\n",
+    "            monitor=monitor,\n",
+    "            mode='max',\n",
+    "            save_best_only=True\n",
+    "        ),\n",
+    "        callbacks.CSVLogger(f'history_fold_{ValidationFold}.csv')\n",
+    "    ]\n",
+    "    \n",
+    "    if add_callback:\n",
+    "        list_of_callbacks.insert(0, add_callback)\n",
+    "    \n",
+    "    return list_of_callbacks "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 39,
+   "id": "c345a203",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:23.920997Z",
+     "iopub.status.busy": "2023-02-24T13:21:23.920172Z",
+     "iopub.status.idle": "2023-02-24T13:21:23.926052Z",
+     "shell.execute_reply": "2023-02-24T13:21:23.925209Z"
+    },
+    "papermill": {
+     "duration": 0.022877,
+     "end_time": "2023-02-24T13:21:23.928340",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:23.905463",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "if not jit or not physical_devices[-1].device_type in ['GPU', 'CPU']:\n",
+    "    exp_callback = OptimalPFBetaWithThresholdCallback()\n",
+    "    monitor = 'val_pFBeta_binarize'\n",
+    "    ckpt_id = 'model.{epoch:02d}-{val_loss:.4f}-{val_pFBeta_binarize:.3f}-{val_threshold:.2f}.h5'\n",
+    "else:\n",
+    "    exp_callback = None\n",
+    "    monitor = 'val_pFBeta'\n",
+    "    ckpt_id = 'model.{epoch:02d}-{val_loss:.4f}-{val_pFBeta:.3f}.h5'\n",
+    "\n",
+    "training_callbacks = get_callbacks(monitor, ckpt_id, exp_callback)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "96fb5f19",
+   "metadata": {
+    "papermill": {
+     "duration": 0.013479,
+     "end_time": "2023-02-24T13:21:23.955361",
+     "exception": false,
+     "start_time": "2023-02-24T13:21:23.941882",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Training**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 40,
+   "id": "91cdcd5c",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2023-02-24T13:21:23.983625Z",
+     "iopub.status.busy": "2023-02-24T13:21:23.983364Z",
+     "iopub.status.idle": "2023-02-24T13:21:24.331010Z",
+     "shell.execute_reply": "2023-02-24T13:21:24.329516Z"
+    },
+    "papermill": {
+     "duration": 0.363816,
+     "end_time": "2023-02-24T13:21:24.332707",
+     "exception": true,
+     "start_time": "2023-02-24T13:21:23.968891",
+     "status": "failed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "ename": "FileNotFoundError",
+     "evalue": "[Errno 2] No such file or directory: '/kaggle/input/rsna-breast-cancer/history_fold_0.csv'",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+      "\u001b[0;31mFileNotFoundError\u001b[0m                         Traceback (most recent call last)",
+      "\u001b[0;32m/tmp/ipykernel_23/340634935.py\u001b[0m in \u001b[0;36m<module>\u001b[0;34m\u001b[0m\n\u001b[1;32m     10\u001b[0m     \u001b[0mhistory\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mpd\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mread_csv\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34mf'history_fold_{ValidationFold}.csv'\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     11\u001b[0m \u001b[0;32melse\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m---> 12\u001b[0;31m     \u001b[0mhistory\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mpd\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mread_csv\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m'/kaggle/input/rsna-breast-cancer/history_fold_0.csv'\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/util/_decorators.py\u001b[0m in \u001b[0;36mwrapper\u001b[0;34m(*args, **kwargs)\u001b[0m\n\u001b[1;32m    309\u001b[0m                     \u001b[0mstacklevel\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0mstacklevel\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    310\u001b[0m                 )\n\u001b[0;32m--> 311\u001b[0;31m             \u001b[0;32mreturn\u001b[0m \u001b[0mfunc\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m*\u001b[0m\u001b[0margs\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;34m**\u001b[0m\u001b[0mkwargs\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    312\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    313\u001b[0m         \u001b[0;32mreturn\u001b[0m \u001b[0mwrapper\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/parsers/readers.py\u001b[0m in \u001b[0;36mread_csv\u001b[0;34m(filepath_or_buffer, sep, delimiter, header, names, index_col, usecols, squeeze, prefix, mangle_dupe_cols, dtype, engine, converters, true_values, false_values, skipinitialspace, skiprows, skipfooter, nrows, na_values, keep_default_na, na_filter, verbose, skip_blank_lines, parse_dates, infer_datetime_format, keep_date_col, date_parser, dayfirst, cache_dates, iterator, chunksize, compression, thousands, decimal, lineterminator, quotechar, quoting, doublequote, escapechar, comment, encoding, encoding_errors, dialect, error_bad_lines, warn_bad_lines, on_bad_lines, delim_whitespace, low_memory, memory_map, float_precision, storage_options)\u001b[0m\n\u001b[1;32m    584\u001b[0m     \u001b[0mkwds\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mupdate\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mkwds_defaults\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    585\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 586\u001b[0;31m     \u001b[0;32mreturn\u001b[0m \u001b[0m_read\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mfilepath_or_buffer\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mkwds\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    587\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    588\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/parsers/readers.py\u001b[0m in \u001b[0;36m_read\u001b[0;34m(filepath_or_buffer, kwds)\u001b[0m\n\u001b[1;32m    480\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    481\u001b[0m     \u001b[0;31m# Create the parser.\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 482\u001b[0;31m     \u001b[0mparser\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mTextFileReader\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mfilepath_or_buffer\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;34m**\u001b[0m\u001b[0mkwds\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    483\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    484\u001b[0m     \u001b[0;32mif\u001b[0m \u001b[0mchunksize\u001b[0m \u001b[0;32mor\u001b[0m \u001b[0miterator\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/parsers/readers.py\u001b[0m in \u001b[0;36m__init__\u001b[0;34m(self, f, engine, **kwds)\u001b[0m\n\u001b[1;32m    809\u001b[0m             \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0moptions\u001b[0m\u001b[0;34m[\u001b[0m\u001b[0;34m\"has_index_names\"\u001b[0m\u001b[0;34m]\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mkwds\u001b[0m\u001b[0;34m[\u001b[0m\u001b[0;34m\"has_index_names\"\u001b[0m\u001b[0;34m]\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    810\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 811\u001b[0;31m         \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_engine\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_make_engine\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mengine\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    812\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    813\u001b[0m     \u001b[0;32mdef\u001b[0m \u001b[0mclose\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/parsers/readers.py\u001b[0m in \u001b[0;36m_make_engine\u001b[0;34m(self, engine)\u001b[0m\n\u001b[1;32m   1038\u001b[0m             )\n\u001b[1;32m   1039\u001b[0m         \u001b[0;31m# error: Too many arguments for \"ParserBase\"\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m-> 1040\u001b[0;31m         \u001b[0;32mreturn\u001b[0m \u001b[0mmapping\u001b[0m\u001b[0;34m[\u001b[0m\u001b[0mengine\u001b[0m\u001b[0;34m]\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mf\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;34m**\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0moptions\u001b[0m\u001b[0;34m)\u001b[0m  \u001b[0;31m# type: ignore[call-arg]\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m   1041\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m   1042\u001b[0m     \u001b[0;32mdef\u001b[0m \u001b[0m_failover_to_python\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mself\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/parsers/c_parser_wrapper.py\u001b[0m in \u001b[0;36m__init__\u001b[0;34m(self, src, **kwds)\u001b[0m\n\u001b[1;32m     49\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     50\u001b[0m         \u001b[0;31m# open handles\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m---> 51\u001b[0;31m         \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_open_handles\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0msrc\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mkwds\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m     52\u001b[0m         \u001b[0;32massert\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mhandles\u001b[0m \u001b[0;32mis\u001b[0m \u001b[0;32mnot\u001b[0m \u001b[0;32mNone\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     53\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/parsers/base_parser.py\u001b[0m in \u001b[0;36m_open_handles\u001b[0;34m(self, src, kwds)\u001b[0m\n\u001b[1;32m    227\u001b[0m             \u001b[0mmemory_map\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0mkwds\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mget\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m\"memory_map\"\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;32mFalse\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    228\u001b[0m             \u001b[0mstorage_options\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0mkwds\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mget\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m\"storage_options\"\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;32mNone\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 229\u001b[0;31m             \u001b[0merrors\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0mkwds\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mget\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m\"encoding_errors\"\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;34m\"strict\"\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    230\u001b[0m         )\n\u001b[1;32m    231\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;32m/opt/conda/lib/python3.7/site-packages/pandas/io/common.py\u001b[0m in \u001b[0;36mget_handle\u001b[0;34m(path_or_buf, mode, encoding, compression, memory_map, is_text, errors, storage_options)\u001b[0m\n\u001b[1;32m    705\u001b[0m                 \u001b[0mencoding\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0mioargs\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mencoding\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m    706\u001b[0m                 \u001b[0merrors\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0merrors\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m--> 707\u001b[0;31m                 \u001b[0mnewline\u001b[0m\u001b[0;34m=\u001b[0m\u001b[0;34m\"\"\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m    708\u001b[0m             )\n\u001b[1;32m    709\u001b[0m         \u001b[0;32melse\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+      "\u001b[0;31mFileNotFoundError\u001b[0m: [Errno 2] No such file or directory: '/kaggle/input/rsna-breast-cancer/history_fold_0.csv'"
+     ]
+    }
+   ],
+   "source": [
+    "if not SUBMIT:\n",
+    "    model.fit(\n",
+    "        training_dataset, \n",
+    "        validation_data=valid_dataset, \n",
+    "        epochs=EPOCHS,\n",
+    "        callbacks=training_callbacks,\n",
+    "        steps_per_epoch=len(train_df) // BATCH_SIZE,\n",
+    "        validation_steps=len(valid_df) // BATCH_SIZE,\n",
+    "    )\n",
+    "    history = pd.read_csv(f'history_fold_{ValidationFold}.csv')\n",
+    "else:\n",
+    "    history = pd.read_csv('/kaggle/input/rsna-breast-cancer/history_fold_0.csv')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a06789d8",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "try:\n",
+    "    display(\n",
+    "        history.style.highlight_max(\n",
+    "            axis=0, props='background-color:lightblue;', subset=['val_auc','val_pFBeta', monitor]\n",
+    "        ).highlight_min(\n",
+    "            axis=0, props='background-color:lightgreen;', subset=['loss', 'val_loss']\n",
+    "        )\n",
+    "    )\n",
+    "except:\n",
+    "    display(\n",
+    "        history.style.highlight_max(\n",
+    "            axis=0, props='background-color:lightblue;', subset=['val_auc', monitor]\n",
+    "        ).highlight_min(\n",
+    "            axis=0, props='background-color:lightgreen;', subset=['loss', 'val_loss']\n",
+    "        )\n",
+    "    )"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "5371c2d7",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Load Best Model**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5c133149",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "!ls /kaggle/working/"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7d2b4e2b",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "def get_best_weight(weight_list):\n",
+    "    max_pfbeta_bin = round(\n",
+    "        history.val_pFBeta_binarize.max(), 3\n",
+    "    )\n",
+    "    for wg in weight_list:\n",
+    "        if str(max_pfbeta_bin) in str(wg):\n",
+    "            return wg\n",
+    "        \n",
+    "trained_weight_files = get_best_weight(glob.glob('/kaggle/working/*.h5'))\n",
+    "trained_weight_files = trained_weight_files or glob.glob('/kaggle/input/rsna-breast-cancer/*.h5')[0]\n",
+    "trained_weight_files "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "12baf578",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "with strategy.scope():\n",
+    "    model = BreastCancerDetect(image_size=INP_SIZE, name='CancerDetect')\n",
+    "    model.load_weights(trained_weight_files)\n",
+    "    model.compile(steps_per_execution=BATCHES_PER_STEPS, jit_compile=True)\n",
+    "    model.trainable = False\n",
+    "model.summary(line_length=80)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "426a3287",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "source": [
+    "**Build Model for TTA**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6b4c9346",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# Set-up for Test-Time-Augmentation\n",
+    "class PredictAugmentaitonLayers(TrainingAugmentationLayers):\n",
+    "    def call(self, inputs):\n",
+    "        x = self.random_flip(inputs, training=True)\n",
+    "        return x"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8ca302c4",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "# ref: https://stackoverflow.com/a/49492256/9215780\n",
+    "def add_layer(model, layer_id, new_layer):\n",
+    "    layers = [l for l in model.layers]\n",
+    "    x = layers[0].output\n",
+    "\n",
+    "    for i in range(1, len(layers)):\n",
+    "        if i == layer_id:\n",
+    "            x = keras.layers.Average(name='tta_avg')([layers[i](x), new_layer(x)])\n",
+    "        else:\n",
+    "            x = layers[i](x)\n",
+    "\n",
+    "    new_model = keras.Model(inputs=layers[0].input, outputs=x)\n",
+    "    return new_model\n",
+    "\n",
+    "\n",
+    "with strategy.scope():\n",
+    "    tta_model = add_layer(\n",
+    "        model, 1, PredictAugmentaitonLayers(name='PredictAugmentaitonLayers')\n",
+    "    )\n",
+    "    tta_model.compile(steps_per_execution=BATCHES_PER_STEPS, jit_compile=True)\n",
+    "    tta_model.trainable = False\n",
+    "tta_model.summary(line_length=100)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "27feccfb",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "if not SUBMIT:\n",
+    "    val_y_true = strategy.gather(model.val_gt, axis=0).numpy()\n",
+    "    val_y_pred = strategy.gather(model.val_pred, axis=0).numpy()\n",
+    "    val_y_pred = tf.nn.sigmoid(val_y_pred)\n",
+    "    val_y_pred_tta = tta_model.predict(valid_dataset)\n",
+    "    val_y_pred_tta = tf.nn.sigmoid(val_y_pred_tta)\n",
+    "    print(val_y_true.shape, val_y_true.shape, val_y_pred_tta.shape)\n",
+    "else:\n",
+    "    val_y_true = np.array(list(map(np.float32, valid_df.cancer.tolist())))\n",
+    "    val_y_pred = model.predict(valid_dataset)\n",
+    "    val_y_pred = tf.nn.sigmoid(val_y_pred)\n",
+    "    val_y_pred_tta = tta_model.predict(valid_dataset)\n",
+    "    val_y_pred_tta = tf.nn.sigmoid(val_y_pred_tta)\n",
+    "    print(val_y_true.shape, val_y_true.shape, val_y_pred_tta.shape)\n",
+    "\n",
+    "# return [max_pfbeta, threshold]\n",
+    "print(OptimalPFBetaWithThresholdCallback().tf_pfbeta_opt(val_y_true, val_y_pred))\n",
+    "print(OptimalPFBetaWithThresholdCallback().tf_pfbeta_opt(val_y_true, val_y_pred_tta))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b558f2a5",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "source": [
+    "# Inference"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1cb226bb",
+   "metadata": {
+    "_kg_hide-input": true,
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "from IPython.display import clear_output\n",
+    "!pip install --no-deps ../input/for-pydicom/pylibjpeg-1.4.0-py3-none-any.whl\n",
+    "!pip install --no-deps ../input/for-pydicom/python_gdcm-3.0.14-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\n",
+    "!pip install --no-deps ../input/for-pydicom/pylibjpeg_libjpeg-1.3.1-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl\n",
+    "!pip install --no-deps ../input/for-pydicom/dicomsdl-0.109.1-cp37-cp37m-manylinux_2_12_x86_64.manylinux2010_x86_64.whl\n",
+    "clear_output()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9f2952d5",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "EXTENSION = \"png\"\n",
+    "TEMP_FOLDER = \"/kaggle/tmp/output/\"\n",
+    "TEST_DICOM = glob.glob(\"/kaggle/input/rsna-breast-cancer-detection/test_images/*/*.dcm\")\n",
+    "os.makedirs(TEMP_FOLDER, exist_ok=True)\n",
+    "\n",
+    "test_df = pd.read_csv(\"/kaggle/input/rsna-breast-cancer-detection/test.csv\")\n",
+    "test_df['cancer'] = 0\n",
+    "test_df['img_path'] = TEMP_FOLDER + test_df[\"patient_id\"].astype(str) + \"_\" + test_df[\"image_id\"].astype(str) + \".png\"\n",
+    "test_ds = create_dataset(\n",
+    "    test_df, \n",
+    "    with_labels = False,\n",
+    "    batch_size=BATCH_SIZE,\n",
+    "    shuffle=False,\n",
+    "    repeat=False\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2032d82e",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "source": [
+    "The following preprocessing cell is taken from [this](https://www.kaggle.com/code/theoviel/rsna-breast-baseline-inference) code example."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1d38bc07",
+   "metadata": {
+    "_kg_hide-input": true,
+    "_kg_hide-output": true,
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "import dicomsdl\n",
+    "from tqdm import tqdm\n",
+    "from joblib import Parallel, delayed\n",
+    "\n",
+    "def read_dicom(dicom_file):\n",
+    "    dicom = dicomsdl.open(dicom_file)\n",
+    "    image = dicom.pixelData(storedvalue=False)\n",
+    "    image = (image - image.min()) / (image.max() - image.min())\n",
+    "    if dicom.PhotometricInterpretation == \"MONOCHROME1\":\n",
+    "        image = 1 - image\n",
+    "    return image\n",
+    "    \n",
+    "def saving(file, size=512, save_folder=\"\", extension=\"png\"):\n",
+    "    image = read_dicom(file)\n",
+    "    image = cv2.resize(image, (size, size))\n",
+    "    patient = file.split('/')[-2]\n",
+    "    image_name = file.split('/')[-1][:-4]\n",
+    "    cv2.imwrite(\n",
+    "        save_folder + f\"{patient}_{image_name}.{extension}\", (image * 255).astype(np.uint8)\n",
+    "    )\n",
+    "    \n",
+    "_ = Parallel(n_jobs=-1)(\n",
+    "    delayed(saving)(\n",
+    "        uid, size=INP_SIZE, save_folder=TEMP_FOLDER, extension=EXTENSION\n",
+    "    ) for uid in tqdm(TEST_DICOM)\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "16446782",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": [
+    "threshold = 0.70 # from model weight file name\n",
+    "pred = model.predict(test_ds)\n",
+    "pred = tf.nn.sigmoid(pred).numpy()\n",
+    "test_df[\"cancer\"] = (pred > threshold).astype(int)\n",
+    "\n",
+    "test_df['prediction_id'] = test_df['patient_id'].astype(str) + \"_\" + test_df['laterality']\n",
+    "sub = test_df[['prediction_id', 'cancer']].groupby(\"prediction_id\").mean().reset_index()\n",
+    "sub.to_csv('/kaggle/working/submission.csv', index=False)\n",
+    "sub.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a3fcaa4a",
+   "metadata": {
+    "papermill": {
+     "duration": null,
+     "end_time": null,
+     "exception": null,
+     "start_time": null,
+     "status": "pending"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.12"
+  },
+  "papermill": {
+   "default_parameters": {},
+   "duration": 57.09281,
+   "end_time": "2023-02-24T13:21:27.637997",
+   "environment_variables": {},
+   "exception": true,
+   "input_path": "__notebook__.ipynb",
+   "output_path": "__notebook__.ipynb",
+   "parameters": {},
+   "start_time": "2023-02-24T13:20:30.545187",
+   "version": "2.3.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
