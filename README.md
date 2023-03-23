@@ -3,8 +3,11 @@ This repository contains portfolio of data science projects resulted from my dat
 # Contents
 ## Deep Learning- Computer vision projects
 * [Mammogram breast-cancer detection]()
-The goal of this project is to develop a deep learning model to predict whether a patient undergoing mamogram has cancer or not. Over 54000 mammograms in dicom formats were processed.
+The goal of this competition is to identify breast cancer. The model was  trained with over 50000 screening mammograms obtained from regular screening.The goal of the  work is to help improve  the automation of detection in screening mammography and enable radiologists to be more accurate and efficient, improving the quality and safety of patient care. It could also help reduce costs and unnecessary medical procedures.
+I developed a deep learning model for breast cancer prediction using TensorFlow and Keras frameworks, utilizing a pre-trained ResNet50 model and a custom-built convolutional neural network (CNN) for image classification.Converted over 54,000 DICOM training images (over 300 GB of data) into PNG format of different sizes (512x512, 256x256) using custom-built pipelines.Preprocessed the highly non-uniform DICOM scans in terms of patients, machine, exposure, size, etc. to prepare the data for training, using OpenCV and PIL libraries.Improved the accuracy and reduced runtime by implementing a transfer learning approach to train the ResNet50 model.
+
 * [Colon cancer detection-histological_slides](https://github.com/lchudal89/portfolio_projects/blob/main/Computer_vision/colon_cancer%20prediction/coloncancer-training.ipynb)
+Developed CNN model using 5000 histological images (for each cancer and normal) for colon cancer. Experiemnted with different transfer learning (mobileNet, ResNet, Xception) and finetuned the model. 
 In this project, CNN  deeplearning framework keras and tensorflow were used to develop a image classification method  histological slides of colon cancer biopsy were 
 * [NFL player contact's detection](https://github.com/lchudal89/portfolio_projects/blob/main/Computer_vision/NFL_players_contact_detection/Contact-detection-kaggle.ipynb)
 Kaggle competitoion- In this kaggle competition, I developed a model to predict the external contact experienced by players during NFL football games, using video and player tracking data to improve player safety Final rank: top 18% (165/939)
