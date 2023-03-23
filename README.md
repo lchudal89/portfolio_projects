@@ -28,4 +28,5 @@ Developed a personalized curriculum recommendation system using NLP techniques f
 ## Time series analysis
 * [US counties microbusiness density prediction]()
 Developed a time series forecasting model to predict microbusiness density in 3165 counties across the United States for the next 8 months, resulting in 25080 individual predictions. The model was trained on four years' worth of past data.Experimented with multiple algorithms, including linear regression, rolling average, autocorrelations, Fourier calendar, structural time series, theta-model, and Prophet, to identify the most effective features for improving the model's accuracy, such as trend, seasonality, and lag features. Implemented the identified features to improve the model's accuracy and successfully forecasted microbusiness density.Ranked top 30%.
+[Linear regression]() along with lag-features and seasonality, [Structural time series](), and [theta model]() were used.
 * [Store sales prediction]()
