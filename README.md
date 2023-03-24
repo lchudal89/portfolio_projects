@@ -13,8 +13,8 @@ Kaggle competitoion- In this kaggle competition,developed a model to predict the
 Worked with highly imbalanced credit card transaction data to determine the fraudelent transaction. Experimented with various approaches to improve the accuracy of the models. Experimented with Decision tree classifier, random forest classifier, and XGBoosting to improve the f1- score.
 * [Housing price prediction](https://github.com/lchudal89/portfolio_projects/blob/main/Machine_learning_projects/paris-housing-prediction.ipynb)
 Experimented with linear regression, decision tree regressor, and random forest regressor to predict paris housing price. Used Grid-search to finetune the hyperparameters for decision tree and random forest regressor.
-* [Wine quality prediction] ()
-Developed various classifications models (Decisiotn Tree, RandomForest, GradientBoosting) algorithms to predict the wine quality. The Gridsearch method used to finetune hyperparameters to improce the accuracy and prevent overfitting.
+* [Wine quality prediction] (https://github.com/lchudal89/portfolio_projects/tree/main/Machine_learning_projects/Wine%20quality%20test)
+Developed various classifications models ([Decisiotn Tree](https://github.com/lchudal89/portfolio_projects/blob/main/Machine_learning_projects/Wine%20quality%20test/decisiontreeclassifier_wine_quality_prediction.ipynb), [RandomForest](https://github.com/lchudal89/portfolio_projects/blob/main/Machine_learning_projects/Wine%20quality%20test/randomforestclassifer_wine_quality_prediction.ipynb), [GradientBoosting](https://github.com/lchudal89/portfolio_projects/blob/main/Machine_learning_projects/Wine%20quality%20test/gradient-boosting-wine_quality_prediction.ipynb) algorithms to predict the wine quality. The Gridsearch method used to finetune hyperparameters to improce the accuracy and prevent overfitting.
 
 ## Natural Language Processing
 * [Movie_recommendation_system](https://github.com/lchudal89/portfolio_projects/blob/main/Natural_language_processing/movie-recommendation-system.ipynb)
