@@ -29,6 +29,6 @@ Developed a time series forecasting model to predict microbusiness density in 31
 [Linear regression](https://github.com/lchudal89/portfolio_projects/blob/main/Time_series_analysis/linear-regression-lag_features_train_test_split.ipynb) along with lag-features and seasonality, [Structural time series](https://github.com/lchudal89/portfolio_projects/blob/main/Time_series_analysis/GodaddyMBD_Structural_time_series.ipynb), and [theta model](https://github.com/lchudal89/portfolio_projects/blob/main/Time_series_analysis/GodaddyMBD_Theta%20model.ipynb) were used.
 ## Exploratory data analysis and visualization
 * [ANPA members map](https://nbviewer.org/github/lchudal89/geomap/blob/main/anpa_members_map.ipynb)
-In this project, I volunetereed to create location map of [ANPA-American physicsists] (https://anpaglobal.org/) members. I preprocessed the members data and  used Folium in python to create some beautiful maps.
+In this project, I volunetereed to create location map of [ANPA-American physicsists](https://anpaglobal.org/) members. I preprocessed the members data and  used Folium in python to create some beautiful maps.
 * Exploratory data analysis and visualization of  [Housing price Kings county-USA](https://github.com/lchudal89/portfolio_projects/blob/main/Data%20analysis%20and%20visualizations/House_Sales_in_King_Count_USA.ipynb)
 * Exploratory data analysis and visulization of [Canada immigration trend](https://github.com/lchudal89/portfolio_projects/blob/main/Data%20analysis%20and%20visualizations/Immigration_to_cananda.ipynb)
