@@ -1,6 +1,5 @@
 # Data Science portfolio_projects
 This repository contains portfolio of data science projects resulted from my data science learning journey.
-# Contents
 ## Deep Learning- Computer vision projects
 * [Mammogram breast-cancer detection]()
 The goal of this competition is to identify breast cancer. The model was  trained with over 50000 screening mammograms obtained from regular screening.The goal of the  work is to help improve  the automation of detection in screening mammography and enable radiologists to be more accurate and efficient, improving the quality and safety of patient care. It could also help reduce costs and unnecessary medical procedures.
